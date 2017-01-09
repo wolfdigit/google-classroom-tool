@@ -416,10 +416,11 @@
         window.open(window.location.href, 'menuWindow', 'innerWidth=440px,outerHeight='+screen.availHeight);
       }
       if (window.opener==null) {
-        openNewWindow();
+        //openNewWindow();
+        $(openNewWindow);
         //setTimeout(function(){window.location.href = 'data:text/html,<pre>content window.</pre>'}, 1000);
         window.stop();
-        setTimeout(function() {window.location.href = 'data:text/html,content window'}, 2000);
+        setTimeout(function() {window.location.href = 'data:text/html,content window'}, 3000);
       }
     </script>
   </head>
