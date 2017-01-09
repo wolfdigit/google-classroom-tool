@@ -30,7 +30,7 @@
         //return auth_explicit();
         token = gapi.auth.getToken().access_token;
         if (token) {
-          mywin = window.open('https://accounts.google.com/o/oauth2/revoke?token=' + token);
+          mywin = window.open('https://accounts.google.com/o/oauth2/revoke?token=' + token, '', 'width=300px,height=300px');
           //ifrm = $('iframe').attr('href', 'https://accounts.google.com/o/oauth2/revoke?token=' + token);
           //$('#signout-div').append(ifrm);
           setTimeout(function(){window.close(mywin);}, 2000);
@@ -419,7 +419,7 @@
         openNewWindow();
         //setTimeout(function(){window.location.href = 'data:text/html,<pre>content window.</pre>'}, 1000);
         window.stop();
-        $(function() {window.location.href = 'data:text/html,content window'});
+        setTimeout(function() {window.location.href = 'data:text/html,content window'}, 2000);
       }
     </script>
   </head>
