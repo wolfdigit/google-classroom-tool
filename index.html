@@ -70,7 +70,8 @@
         // https://developers.google.com/classroom/reference/rest/v1/courses/list
         var req = classroom.courses.list({
           pageSize: 500,
-          teacherId: "me"
+          teacherId: "me",
+          courseStates: "ACTIVE"
         });
         req.execute(function(resp) {
           var courses = resp.courses;
