@@ -1,0 +1,439 @@
+<html>
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+    <script src="https://code.jquery.com/jquery-3.1.1.min.js" integrity="sha256-hVVnYaiADRTO2PzUGmuLJr8BLUSjGIZsDYGmIJLv2b8=" crossorigin="anonymous"></script>
+    <base target="content-frm">
+	<script>
+      var CLIENT_ID = '153539536649-d8f9494tghnpfo76reqqp2f9j01pq1gf.apps.googleusercontent.com';
+
+      var SCOPES = ["https://www.googleapis.com/auth/classroom.courses.readonly", "https://www.googleapis.com/auth/classroom.coursework.students.readonly", "https://www.googleapis.com/auth/classroom.rosters"];
+      
+      function auth_quiet() {
+        gapi.auth.authorize(
+          {
+            'client_id': CLIENT_ID,
+            'scope': SCOPES.join(' '),
+            'immediate': true
+          }, handleAuthResult);
+      }
+      
+      function auth_explicit() {
+        gapi.auth.authorize(
+          {client_id: CLIENT_ID,
+           scope: SCOPES.join(' '),
+           immediate: false
+          }, handleAuthResult);
+        return false;        
+      }
+      
+      function auth_revoke() {
+        //return auth_explicit();
+        token = gapi.auth.getToken().access_token;
+        if (token) {
+          mywin = window.open('https://accounts.google.com/o/oauth2/revoke?token=' + token);
+          //ifrm = $('iframe').attr('href', 'https://accounts.google.com/o/oauth2/revoke?token=' + token);
+          //$('#signout-div').append(ifrm);
+          setTimeout(function(){window.close(mywin);}, 2000);
+        }
+        //gapi.auth.signOut();
+        //gapi.auth.setToken(null);
+        //setTimeout(auth_quiet, 3000);
+      }
+      
+      function handleAuthResult(authResult) {
+        var authorizeDiv = $('#auth-div');
+        var signoutDiv = $('#signout-div');
+        if (authResult && !authResult.error) {
+          // Hide auth UI, then load client library.
+          authorizeDiv.hide();
+          signoutDiv.show();
+          loadClassroomApi();
+        } else {
+          // Show auth UI, allowing the user to initiate authorization by
+          // clicking authorize button.
+          authorizeDiv.show();
+          signoutDiv.hide();
+        }
+      }
+
+      var classroom=null;
+      function loadClassroomApi() {
+        gapi.client.load('classroom', 'v1', main);
+      }
+      
+      function main() {
+        classroom = gapi.client.classroom;
+        listCourses();
+      }
+      
+      function listCourses() {
+        // https://developers.google.com/classroom/reference/rest/v1/courses/list
+        var req = classroom.courses.list({
+          pageSize: 500,
+          teacherId: "me"
+        });
+        req.execute(function(resp) {
+          var courses = resp.courses;
+          // eg: "{"id":"2091340474","name":"105-108班資訊科技概論","section":"105-1","descriptionHeading":"108資訊科技概論 105-1","room":"N301電腦教室","ownerId":"106910676993501640303","creationTime":"2016-08-29T06:40:52.320Z","updateTime":"2016-08-30T07:35:19.602Z","enrollmentCode":"0x6bimv","courseState":"ACTIVE","alternateLink":"http://classroom.google.com/c/MjA5MTM0MDQ3NFpa","teacherGroupEmail":"108_105_1_teachers_f5cbbd24@lssh.tp.edu.tw","courseGroupEmail":"108_105_1_ac4e262b@lssh.tp.edu.tw","guardiansEnabled":false}"
+          for (var i=0; i<courses.length; i++) {
+            var course = courses[i];
+            var course_div = $('<div>').attr('id', 'course-'+course.id);
+            course_div.addClass('course-div');
+            course_div.text(course.name);
+            $('#classwork-div').append(course_div);
+
+            getStudents(course.id);
+            listWorks(course.id);
+          }
+        });
+      }
+      
+      var stuDict=[];
+      function getStudents(cid) {
+        var req = classroom.courses.students.list({
+          pageSize: 500,
+          courseId: cid
+        });
+        req.execute(function(resp) {
+          //console.log(resp);
+          var students = resp.students;
+          //console.log(students);
+          for (var i=0; i<students.length; i++) {
+            //eg: {"courseId":"2770546310","userId":"110520044991149431177","profile":{"id":"110520044991149431177","name":{"givenName":"u10500098","familyName":"105_10715_徐崇祖","fullName":"u10500098 105_10715_徐崇祖"}}}
+            var profile = students[i].profile;
+            stuDict[profile.id] = profile.name;
+          }
+        });
+      }
+      
+      function listWorks(cid) {
+        var req = classroom.courses.courseWork.list({
+          pageSize: 500,
+          courseId: cid,
+          courseWorkStates: 'PUBLISHED'
+        });
+        req.execute(function(resp) {
+          var works = resp.courseWork;
+          //console.log(works);
+          for (var i=0; i<works.length; i++) {
+            var work = works[i];
+            var wid = work.id;
+            var work_div = $('<div>').attr('id', 'work-'+wid);
+            work_div.addClass('work-div');
+            work_div.text(work.title);
+            work_div.click({cid:cid,wid:wid,work:work}, function(e){
+              showWorkMsg(e.data.work);
+              $('.work-div').removeClass('selected');
+              $(this).addClass('selected');
+              listSubs(e.data.cid,e.data.wid);
+            });
+            $('#course-'+cid).append(work_div);
+          }
+        });
+      }
+      function showWorkMsg(work) {
+        $('#msg-div').empty();
+        
+        $('#msg-div').append( $('<div>').html('createTime: '+work.creationTime) );
+        $('#msg-div').append( $('<div>').html('updateTime: '+work.updateTime) );
+        if (work.dueDate) $('#msg-div').append( $('<div>').html('dueDate: '+JSON.stringify(work.dueDate)) );
+        if (work.dueTime) $('#msg-div').append( $('<div>').html('dueTime: '+JSON.stringify(work.dueTime)) );
+        
+        $('#msg-div').append( $('<a>').text(work.title).attr('href', work.alternateLink).click(work.alternateLink, function(e){
+          openWindow(e.data);
+          return false;
+        }) );
+        $('#msg-div').append( $('<pre>').html(work.description) );
+
+        $('#msg-div').append( $('<hr>') );
+        $('#msg-div').append( $('<div>').html('workType: '+work.workType) );
+        if (work.workType=='ASSIGNMENT') $('#msg-div').append( $('<div>').html('folder: ').append($('<a>').attr('href', work.assignment.studentWorkFolder.alternateLink).text(work.assignment.studentWorkFolder.title)) );
+
+        $('#msg-div').append('<br>');
+        $('#msg-div').append( $('<div>').html(JSON.stringify(work).replace(/,/g, ",<br>")) );
+      }
+      
+      var subs = [];
+      function listSubs(cid, wid) {
+        var req = classroom.courses.courseWork.studentSubmissions.list({
+          pageSize: 500,
+          courseId: cid,
+          courseWorkId: wid     // can be '-' for all courseworks
+          // userId: stuId      // userId can be email
+        });
+        $('#submission-div').text('loading...');
+        req.execute(function(resp) {
+          subs = resp.studentSubmissions;
+          //console.log(subs);
+          $('#submission-div').empty();
+          for (var i=0; i<subs.length; i++) {
+            var sub = subs[i];
+            //console.log(sub);
+            var sub_div = $('<div>').attr('id', 'sub-'+sub.id);
+            sub_div.addClass('sub-div');
+            //var link_elem = $('<a>').text(stuDict[sub.userId].fullName);
+            //link_elem.attr('href', sub.alternateLink);
+            //sub_div.append(link_elem);
+            sub_div.text(stuDict[sub.userId].fullName);
+            sub_div.attr('title', sub.state);
+            sub_div.click(i, function(e){
+              $('.sub-div').removeClass('selected');
+              $(this).addClass('selected');
+              showSub(e.data);
+            });
+            //if (sub.state=="TURNED_IN") {
+              //sub_div.prepend($('<span class="state turned-in"></span>'));
+              //sub_div.addClass('state-turned-in');
+            //}
+            if (sub.state=="NEW") sub_div.addClass('state-new');
+            if (sub.state=="CREATED") sub_div.addClass('state-created');
+            if (sub.state=="TURNED_IN") sub_div.addClass('state-turned-in');
+            if (sub.state=="RETURNED") sub_div.addClass('state-returned');
+            if (sub.state=="RECLAIMED_BY_STUDENT") sub_div.addClass('state-reclaimed');
+            
+            if (sub.late) {
+              sub_div.addClass('state-late');
+              sub_div.attr('title', sub_div.attr('title')+", late");
+            }
+            $('#submission-div').append(sub_div);
+          }
+        });
+      }
+      
+      function showSub(sid) {
+        var sub = subs[sid];
+        $('#content-div').empty();
+        $('#content-div').append($('<div>').text("update: "+sub.updateTime));
+        var link = $('<a>').text("open classroom").attr('href', sub.alternateLink).attr('target', '_blank').click(sub.alternateLink,function(e) {
+          openWindow(e.data);
+          return false;
+        });
+        $('#content-div').append(link);
+        if (sub.courseWorkType=="ASSIGNMENT") return showAssignment(sub.assignmentSubmission);
+        if (sub.courseWorkType=="SHORT_ANSWER_QUESTION") return showShortAns(sub.shortAnswerSubmission);
+        if (sub.courseWorkType=="MULTIPLE_CHOICE_QUESTION") return showChoiceAns(sub.multipleChoiceSubmission);
+      }
+      
+      function showAssignment(assignment) {
+        //$('#content-div').append($('<div>').text(JSON.stringify(assignment.attachments)));
+        //$('#content-frm').attr('src', assignment.attachments[0].alternateLink);
+        listAttachments(assignment.attachments);
+        //openWindow(assignment.attachments[0].driveFile.alternateLink);
+        $('#content-div > .file-div').first().click();
+      }
+      
+      function listAttachments(attachments) {
+        // [{"driveFile":{"id":"0B5GDzhNtS1-ycVlaZ2tIUDQ1V2s","title":"10721.cpp","alternateLink":"https://drive.google.com/open?id=0B5GDzhNtS1-ycVlaZ2tIUDQ1V2s","thumbnailUrl":"https://drive.google.com/thumbnail?id=0B5GDzhNtS1-ycVlaZ2tIUDQ1V2s&sz=s200"}}]
+        for (var i=0; i<attachments.length; i++) {
+          var attach = attachments[i];
+          var file_div = $('<div>');
+          var url = '';
+          file_div.addClass('file-div');
+          if (attach.driveFile !== 'undefined') {
+            var file = attach.driveFile;
+            //file_div.attr('id', 'file-'+file.id);
+            var link = $('<a>');
+            link.attr('href', file.alternateLink).text(file.title);
+            url = file.alternateLink;
+            link.click(function(e){return false});
+            file_div.append(link);
+          }
+          else {
+            file_div.text(JSON.stringify(attach));
+          }
+          file_div.click(url, function(e) {
+            if (e.data!='') openWindow(e.data);
+            $('.file-div').removeClass('selected');
+            $(this).addClass('selected');
+          });
+          $('#content-div').append(file_div);
+        }
+      }
+      
+      function showShortAns(ans) {
+        $('#content-div').append($('<div>').text(JSON.stringify(ans.answer)).addClass('ans-div'));
+        //window.open('data:text/html,hello world!')
+      }
+      
+      function showChoiceAns(ans) {
+        $('#content-div').append($('<div>').text(JSON.stringify(ans.answer)).addClass('ans-div'));
+      }
+      
+      var myWin = window.opener;
+      function openWindow(url) {
+        if (!myWin || !myWin.location ) myWin = window.open('', 'myWin', 'left=280px,top=0px');
+        myWin.location = url;
+      }
+    </script>
+    <script src="https://apis.google.com/js/client.js?onload=auth_quiet"></script>
+    <style>
+      * {
+        vertical-align: top;
+      }
+      body {
+        position: relative;
+        width: 100%;
+        height: 100%;
+        margin: 0;
+        overflow: auto;
+      }
+      #wrapper {
+        display: table;
+        /*
+        position: absolute;
+        left: 0;
+        right: 0;
+        top: 0;
+        bottom: 0;
+        */
+        width: 100%;
+        height: 100%;
+      }
+      #classwork-cell {
+        display: table-cell;
+        position: relative;
+        min-width: 120px;
+        width: 30%;
+      }
+      #submission-cell {
+        display: table-cell;
+        position: relative;
+        min-width: 200px;
+        width: 40%;
+      }
+      #content-cell {
+        display: table-cell;
+        position: relative;
+        min-width: 120px;
+        width: 30%;
+      }
+      #classwork-div {
+        position: absolute;
+        left: 0;
+        right: 0;
+        top: 0;
+        bottom: 0;
+        overflow: auto;
+      }
+      .course-div {
+        margin-left: 5px;
+        margin-bottom: 5px;
+        font-weight: bold;
+      }
+      .work-div {
+        margin-left: 10px;
+        color: blue;
+        /*margin-top: 0.2em;*/
+        cursor: pointer;
+        padding: 0.2em;
+        border-radius: 0.2em;
+      }
+      .work-div.selected {
+        background-color: lightblue;
+      }
+      #submission-div {
+        position: absolute;
+        left: 0;
+        right: 0;
+        top: 0;
+        bottom: 0;
+        white-space: nowrap;
+        overflow: auto;
+      }
+      .sub-div {
+        cursor: pointer;
+        padding: 0.2em;
+        border-radius: 0.2em;
+      }
+      .sub-div.selected {
+        background-color: lightgray;
+      }
+      #msg-div {
+        position: absolute;
+        left: 0;
+        right: 0;
+        top: 0;
+        bottom: 50%;
+        overflow: auto;        
+      }
+      #content-div {
+        position: absolute;
+        left: 0;
+        right: 0;
+        top: 50%;
+        bottom: 0;
+        overflow: auto;
+      }
+      .file-div {
+        margin: 5px;
+        /*background-color: lightgray;*/
+        border-radius: 5px;
+        padding: 5px;
+        cursor: pointer;
+      }
+      .file-div.selected {
+        background-color: lightcyan;
+      }
+      .file-div a {
+        text-decoration: none;
+      }
+      .ans-div {
+        margin: 5px;
+        background-color: lightgray;
+        border-radius: 5px;
+        padding: 5px;
+      }
+    </style>
+    <style>
+      @font-face{
+        font-family:'Glyphicons Halflings';
+        src:url('fonts/glyphicons-halflings-regular.eot');
+        src:url('fonts/glyphicons-halflings-regular.eot?#iefix') format('embedded-opentype'),url('fonts/glyphicons-halflings-regular.woff') format('woff'),url('fonts/glyphicons-halflings-regular.ttf') format('truetype'),url('fonts/glyphicons-halflings-regular.svg#glyphicons-halflingsregular') format('svg');
+      }
+      .sub-div::before {
+        font-family: 'Glyphicons Halflings';
+      }
+      .state-new::before, .state-created::before {
+        content: "\e014"; /* glyphicon-remove */
+      }
+      .state-turned-in::before {
+        content: "\e205"; /* glyphicon-copy */
+      }
+      .state-returned::before {
+        /*content: "\e178";  /* glyphicon-transfer */
+        content: "\e031"; /* glyphicon-refresh */
+      }
+      .state-reclaimed::before {
+        content: "\e120"; /* glyphicon-resize-horizontal */
+      }
+      .state-late::before {
+        color: red;
+      }
+    </style>
+    <!--<link href="//netdna.bootstrapcdn.com/bootstrap/3.0.0/css/bootstrap-glyphicons.css" rel="stylesheet">-->
+    <script>
+      function openNewWindow() {
+        window.open(window.location.href, 'menuWindow', 'innerWidth=440px,outerHeight='+screen.availHeight);
+      }
+      if (window.opener==null) {
+        openNewWindow();
+        //setTimeout(function(){window.location.href = 'data:text/html,<pre>content window.</pre>'}, 1000);
+        window.stop();
+        $(function() {window.location.href = 'data:text/html,content window'});
+      }
+    </script>
+  </head>
+  <body><div id="wrapper">
+    <div id="classwork-cell"><div id="classwork-div">
+      <div><button onclick="openNewWindow(event)">新視窗</button></div>
+      <div id="auth-div" style="display: none">
+        <button id="auth-butt" onclick="auth_explicit(event)">登入google帳號</button>
+      </div>
+      <div id="signout-div" style="display: none">
+        <button id="signout-butt" onclick="auth_revoke(event)">登出</button>
+      </div>
+    </div></div>
+    <div id="submission-cell"><div id="submission-div"></div></div>
+    <div id="content-cell"><div id="msg-div"></div><div id="content-div"></div></div>
+  </div></body>
+</html>
