@@ -176,6 +176,7 @@
             //link_elem.attr('href', sub.alternateLink);
             //sub_div.append(link_elem);
             sub_div.text(stuDict[sub.userId].fullName);
+            sub_div.attr('data-lastName', stuDict[sub.userId].familyName);
             sub_div.attr('title', sub.state);
             sub_div.click(i, function(e){
               $('.sub-div').removeClass('selected');
@@ -198,6 +199,12 @@
             }
             $('#submission-div').append(sub_div);
           }
+          
+          $('#submission-div > .sub-div').sort(function(a,b) {
+            console.log(a);
+            return a.dataset.lastname>b.dataset.lastname?1:-1;
+            //return $(a).data('lastName')>$(b).data('lastName');
+          }).detach().appendTo('#submission-div');
         });
       }
       
